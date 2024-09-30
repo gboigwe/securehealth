@@ -9,51 +9,49 @@
 (define-constant ERR_ACCESS_DENIED (err u104))
 (define-constant MAX_ACCESS_LIST_SIZE u20)
 
-;; Data structures
-(define-map patient-records
-  { patient-id: (string-utf8 64) }
-  {
-    record-hash: (buff 32),
-    metadata: {
-      name: (string-utf8 100),
-      date-of-birth: uint,
-      blood-type: (string-ascii 3)
-    },
-    last-updated: uint,
-    access-list: (list MAX_ACCESS_LIST_SIZE principal),
-    is-active: bool
-  }
-)
-
-(define-map access-requests
-  { patient-id: (string-utf8 64), requester: principal }
-  { status: (string-ascii 10), requested-at: uint }
-)
-
-(define-map healthcare-providers
-  { provider-id: principal }
-  { name: (string-utf8 100), license-number: (string-ascii 20), is-active: bool }
-)
-
 ;; SIP-009 NFT Interface
 (impl-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
 
 (define-non-fungible-token patient-record (string-utf8 64))
 
+;; Data structures
+(define-map patient-records
+  {patient-id: (string-utf8 64)}
+  {
+    record-hash: (buff 32),
+    name: (string-utf8 100),
+    date-of-birth: uint,
+    blood-type: (string-ascii 3),
+    last-updated: uint,
+    access-list: (list 20 principal),
+    is-active: bool
+  }
+)
+
+(define-map access-requests
+  {patient-id: (string-utf8 64), requester: principal}
+  {status: (string-ascii 10), requested-at: uint}
+)
+
+(define-map healthcare-providers
+  {provider-id: principal}
+  {name: (string-utf8 100), license-number: (string-ascii 20), is-active: bool}
+)
+
 ;; Read-only functions
 (define-read-only (get-patient-record (patient-id (string-utf8 64)))
-  (match (map-get? patient-records { patient-id: patient-id })
-    record (ok (merge record { patient-id: patient-id }))
+  (match (map-get? patient-records {patient-id: patient-id})
+    record (ok (merge record {patient-id: patient-id}))
     ERR_PATIENT_NOT_FOUND
   )
 )
 
 (define-read-only (get-access-request (patient-id (string-utf8 64)) (requester principal))
-  (map-get? access-requests { patient-id: patient-id, requester: requester })
+  (map-get? access-requests {patient-id: patient-id, requester: requester})
 )
 
 (define-read-only (get-healthcare-provider (provider-id principal))
-  (map-get? healthcare-providers { provider-id: provider-id })
+  (map-get? healthcare-providers {provider-id: provider-id})
 )
 
 ;; Public functions
@@ -67,13 +65,15 @@
       (caller tx-sender)
     )
     (asserts! (is-eq caller CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
-    (asserts! (is-none (map-get? patient-records { patient-id: patient-id })) ERR_ALREADY_EXISTS)
+    (asserts! (is-none (map-get? patient-records {patient-id: patient-id})) ERR_ALREADY_EXISTS)
     (try! (nft-mint? patient-record patient-id caller))
     (ok (map-set patient-records
-      { patient-id: patient-id }
+      {patient-id: patient-id}
       {
         record-hash: 0x,
-        metadata: { name: name, date-of-birth: date-of-birth, blood-type: blood-type },
+        name: name,
+        date-of-birth: date-of-birth,
+        blood-type: blood-type,
         last-updated: block-height,
         access-list: (list caller),
         is-active: true
@@ -88,11 +88,11 @@
   (let
     (
       (caller tx-sender)
-      (current-record (unwrap! (map-get? patient-records { patient-id: patient-id }) ERR_PATIENT_NOT_FOUND))
+      (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
     )
     (asserts! (is-authorized caller patient-id) ERR_NOT_AUTHORIZED)
     (ok (map-set patient-records
-      { patient-id: patient-id }
+      {patient-id: patient-id}
       (merge current-record { 
         record-hash: new-record-hash,
         last-updated: block-height
@@ -109,8 +109,8 @@
     )
     (asserts! (is-some (get-healthcare-provider caller)) ERR_NOT_AUTHORIZED)
     (ok (map-set access-requests
-      { patient-id: patient-id, requester: caller }
-      { status: "pending", requested-at: current-time }
+      {patient-id: patient-id, requester: caller}
+      {status: "pending", requested-at: current-time}
     ))
   )
 )
@@ -119,13 +119,13 @@
   (let
     (
       (caller tx-sender)
-      (current-record (unwrap! (map-get? patient-records { patient-id: patient-id }) ERR_PATIENT_NOT_FOUND))
+      (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
     )
     (asserts! (or (is-eq caller CONTRACT_OWNER) (is-owner caller patient-id)) ERR_NOT_AUTHORIZED)
     (asserts! (is-some (get-healthcare-provider provider)) ERR_INVALID_INPUT)
-    (map-set access-requests { patient-id: patient-id, requester: provider } { status: "approved", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT)) })
+    (map-set access-requests {patient-id: patient-id, requester: provider} {status: "approved", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT))})
     (ok (map-set patient-records
-      { patient-id: patient-id }
+      {patient-id: patient-id}
       (merge current-record { 
         access-list: (unwrap! (as-max-len? (append (get access-list current-record) provider) MAX_ACCESS_LIST_SIZE) ERR_INVALID_INPUT)
       })
@@ -137,12 +137,12 @@
   (let
     (
       (caller tx-sender)
-      (current-record (unwrap! (map-get? patient-records { patient-id: patient-id }) ERR_PATIENT_NOT_FOUND))
+      (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
     )
     (asserts! (or (is-eq caller CONTRACT_OWNER) (is-owner caller patient-id)) ERR_NOT_AUTHORIZED)
-    (map-set access-requests { patient-id: patient-id, requester: provider } { status: "revoked", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT)) })
+    (map-set access-requests {patient-id: patient-id, requester: provider} {status: "revoked", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT))})
     (ok (map-set patient-records
-      { patient-id: patient-id }
+      {patient-id: patient-id}
       (merge current-record { 
         access-list: (filter remove-principal (get access-list current-record))
       })
@@ -157,8 +157,8 @@
     )
     (asserts! (is-eq caller CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
     (ok (map-set healthcare-providers
-      { provider-id: caller }
-      { name: name, license-number: license-number, is-active: true }
+      {provider-id: caller}
+      {name: name, license-number: license-number, is-active: true}
     ))
   )
 )
@@ -167,7 +167,7 @@
 (define-private (is-authorized (caller principal) (patient-id (string-utf8 64)))
   (let
     (
-      (record (unwrap! (map-get? patient-records { patient-id: patient-id }) false))
+      (record (unwrap! (map-get? patient-records {patient-id: patient-id}) false))
     )
     (or 
       (is-eq caller CONTRACT_OWNER)
@@ -193,10 +193,10 @@
     (try! (nft-transfer? patient-record token-id sender recipient))
     (let
       (
-        (current-record (unwrap! (map-get? patient-records { patient-id: token-id }) ERR_PATIENT_NOT_FOUND))
+        (current-record (unwrap! (map-get? patient-records {patient-id: token-id}) ERR_PATIENT_NOT_FOUND))
       )
       (ok (map-set patient-records
-        { patient-id: token-id }
+        {patient-id: token-id}
         (merge current-record { 
           access-list: (list recipient)
         })
