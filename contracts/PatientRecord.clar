@@ -7,6 +7,7 @@
 (define-constant ERR_INVALID_INPUT (err u102))
 (define-constant ERR_ALREADY_EXISTS (err u103))
 (define-constant ERR_ACCESS_DENIED (err u104))
+(define-constant ERR_LIST_FULL (err u105))
 (define-constant MAX_ACCESS_LIST_SIZE u20)
 
 ;; SIP-009 NFT Interface
@@ -120,14 +121,16 @@
     (
       (caller tx-sender)
       (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
+      (current-access-list (get access-list current-record))
     )
     (asserts! (or (is-eq caller CONTRACT_OWNER) (is-owner caller patient-id)) ERR_NOT_AUTHORIZED)
     (asserts! (is-some (get-healthcare-provider provider)) ERR_INVALID_INPUT)
+    (asserts! (< (len current-access-list) MAX_ACCESS_LIST_SIZE) ERR_LIST_FULL)
     (map-set access-requests {patient-id: patient-id, requester: provider} {status: "approved", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT))})
     (ok (map-set patient-records
       {patient-id: patient-id}
       (merge current-record { 
-        access-list: (unwrap! (as-max-len? (append (get access-list current-record) provider) MAX_ACCESS_LIST_SIZE) ERR_INVALID_INPUT)
+        access-list: (append-provider current-access-list provider)
       })
     ))
   )
@@ -183,6 +186,18 @@
 
 (define-private (remove-principal (value principal))
   (not (is-eq value tx-sender))
+)
+
+(define-private (append-provider (current-list (list 20 principal)) (new-provider principal))
+  (let
+    (
+      (list-length (len current-list))
+    )
+    (if (>= list-length u19)
+      current-list
+      (unwrap! (as-max-len? (append current-list new-provider) u20) current-list)
+    )
+  )
 )
 
 ;; SIP-009 NFT functions
