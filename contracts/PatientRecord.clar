@@ -1,5 +1,8 @@
 ;; PatientRecord Smart Contract
 
+;; Define the NFT trait
+(use-trait nft-trait .sip-009-nft-standard-trait.nft-trait)
+
 ;; Constants
 (define-constant CONTRACT_OWNER tx-sender)
 (define-constant ERR_NOT_AUTHORIZED (err u100))
@@ -9,6 +12,12 @@
 (define-constant ERR_ACCESS_DENIED (err u104))
 (define-constant ERR_LIST_FULL (err u105))
 (define-constant MAX_ACCESS_LIST_SIZE u20)
+
+;; Define the NFT
+(define-non-fungible-token patient-record (string-utf8 64))
+
+;; Implement SIP009 NFT trait
+(impl-trait .sip-009-nft-standard-trait.nft-trait)
 
 ;; Data structures
 (define-map patient-records
@@ -32,6 +41,41 @@
 (define-map healthcare-providers
   {provider-id: principal}
   {name: (string-utf8 100), license-number: (string-ascii 20), is-active: bool}
+)
+
+;; Define data variable for last token ID
+(define-data-var last-token-id uint u0)
+
+;; SIP009 NFT functions
+(define-public (transfer (token-id (string-utf8 64)) (sender principal) (recipient principal))
+  (begin
+    (asserts! (is-eq tx-sender sender) ERR_NOT_AUTHORIZED)
+    (asserts! (is-none (get-healthcare-provider recipient)) ERR_INVALID_INPUT)
+    (try! (nft-transfer? patient-record token-id sender recipient))
+    (let
+      (
+        (current-record (unwrap! (map-get? patient-records {patient-id: token-id}) ERR_PATIENT_NOT_FOUND))
+      )
+      (ok (map-set patient-records
+        {patient-id: token-id}
+        (merge current-record { 
+          access-list: (list recipient)
+        })
+      ))
+    )
+  )
+)
+
+(define-read-only (get-last-token-id)
+  (ok (var-get last-token-id))
+)
+
+(define-read-only (get-token-uri (token-id (string-utf8 64)))
+  (ok none)
+)
+
+(define-read-only (get-owner (token-id (string-utf8 64)))
+  (ok (nft-get-owner? patient-record token-id))
 )
 
 ;; Read-only functions
@@ -59,9 +103,12 @@
   (let
     (
       (caller tx-sender)
+      (new-token-id (+ (var-get last-token-id) u1))
     )
     (asserts! (is-eq caller CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
     (asserts! (is-none (map-get? patient-records {patient-id: patient-id})) ERR_ALREADY_EXISTS)
+    (try! (nft-mint? patient-record patient-id caller))
+    (var-set last-token-id new-token-id)
     (ok (map-set patient-records
       {patient-id: patient-id}
       {
@@ -175,12 +222,7 @@
 )
 
 (define-private (is-owner (caller principal) (patient-id (string-utf8 64)))
-  (let
-    (
-      (record (unwrap! (map-get? patient-records {patient-id: patient-id}) false))
-    )
-    (is-eq caller (element-at (get access-list record) u0))
-  )
+  (is-eq (some caller) (nft-get-owner? patient-record patient-id))
 )
 
 (define-private (remove-principal (value principal))
