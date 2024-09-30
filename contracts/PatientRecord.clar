@@ -10,11 +10,6 @@
 (define-constant ERR_LIST_FULL (err u105))
 (define-constant MAX_ACCESS_LIST_SIZE u20)
 
-;; SIP-009 NFT Interface
-(impl-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
-
-(define-non-fungible-token patient-record (string-utf8 64))
-
 ;; Data structures
 (define-map patient-records
   {patient-id: (string-utf8 64)}
@@ -67,7 +62,6 @@
     )
     (asserts! (is-eq caller CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
     (asserts! (is-none (map-get? patient-records {patient-id: patient-id})) ERR_ALREADY_EXISTS)
-    (try! (nft-mint? patient-record patient-id caller))
     (ok (map-set patient-records
       {patient-id: patient-id}
       {
@@ -130,7 +124,7 @@
     (ok (map-set patient-records
       {patient-id: patient-id}
       (merge current-record { 
-        access-list: (append-provider current-access-list provider)
+        access-list: (append current-access-list provider)
       })
     ))
   )
@@ -181,49 +175,14 @@
 )
 
 (define-private (is-owner (caller principal) (patient-id (string-utf8 64)))
-  (is-eq (some caller) (nft-get-owner? patient-record patient-id))
+  (let
+    (
+      (record (unwrap! (map-get? patient-records {patient-id: patient-id}) false))
+    )
+    (is-eq caller (element-at (get access-list record) u0))
+  )
 )
 
 (define-private (remove-principal (value principal))
   (not (is-eq value tx-sender))
-)
-
-(define-private (append-provider (current-list (list 20 principal)) (new-provider principal))
-  (let
-    (
-      (list-length (len current-list))
-    )
-    (if (>= list-length u19)
-      current-list
-      (unwrap! (as-max-len? (append current-list new-provider) u20) current-list)
-    )
-  )
-)
-
-;; SIP-009 NFT functions
-(define-public (transfer (token-id (string-utf8 64)) (sender principal) (recipient principal))
-  (begin
-    (asserts! (is-eq tx-sender sender) ERR_NOT_AUTHORIZED)
-    (asserts! (is-none (get-healthcare-provider recipient)) ERR_INVALID_INPUT)
-    (try! (nft-transfer? patient-record token-id sender recipient))
-    (let
-      (
-        (current-record (unwrap! (map-get? patient-records {patient-id: token-id}) ERR_PATIENT_NOT_FOUND))
-      )
-      (ok (map-set patient-records
-        {patient-id: token-id}
-        (merge current-record { 
-          access-list: (list recipient)
-        })
-      ))
-    )
-  )
-)
-
-(define-public (get-token-uri (token-id (string-utf8 64)))
-  (ok none)
-)
-
-(define-public (get-owner (token-id (string-utf8 64)))
-  (ok (nft-get-owner? patient-record token-id))
 )
