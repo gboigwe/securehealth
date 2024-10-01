@@ -1,8 +1,5 @@
 ;; PatientRecord Smart Contract
 
-;; Define the NFT trait
-(use-trait nft-trait .sip-009-nft-standard-trait.nft-trait)
-
 ;; Constants
 (define-constant CONTRACT_OWNER tx-sender)
 (define-constant ERR_NOT_AUTHORIZED (err u100))
@@ -12,12 +9,6 @@
 (define-constant ERR_ACCESS_DENIED (err u104))
 (define-constant ERR_LIST_FULL (err u105))
 (define-constant MAX_ACCESS_LIST_SIZE u20)
-
-;; Define the NFT
-(define-non-fungible-token patient-record (string-utf8 64))
-
-;; Implement SIP009 NFT trait
-(impl-trait .sip-009-nft-standard-trait.nft-trait)
 
 ;; Data structures
 (define-map patient-records
@@ -29,7 +20,8 @@
     blood-type: (string-ascii 3),
     last-updated: uint,
     access-list: (list 20 principal),
-    is-active: bool
+    is-active: bool,
+    owner: principal
   }
 )
 
@@ -41,41 +33,6 @@
 (define-map healthcare-providers
   {provider-id: principal}
   {name: (string-utf8 100), license-number: (string-ascii 20), is-active: bool}
-)
-
-;; Define data variable for last token ID
-(define-data-var last-token-id uint u0)
-
-;; SIP009 NFT functions
-(define-public (transfer (token-id (string-utf8 64)) (sender principal) (recipient principal))
-  (begin
-    (asserts! (is-eq tx-sender sender) ERR_NOT_AUTHORIZED)
-    (asserts! (is-none (get-healthcare-provider recipient)) ERR_INVALID_INPUT)
-    (try! (nft-transfer? patient-record token-id sender recipient))
-    (let
-      (
-        (current-record (unwrap! (map-get? patient-records {patient-id: token-id}) ERR_PATIENT_NOT_FOUND))
-      )
-      (ok (map-set patient-records
-        {patient-id: token-id}
-        (merge current-record { 
-          access-list: (list recipient)
-        })
-      ))
-    )
-  )
-)
-
-(define-read-only (get-last-token-id)
-  (ok (var-get last-token-id))
-)
-
-(define-read-only (get-token-uri (token-id (string-utf8 64)))
-  (ok none)
-)
-
-(define-read-only (get-owner (token-id (string-utf8 64)))
-  (ok (nft-get-owner? patient-record token-id))
 )
 
 ;; Read-only functions
@@ -94,6 +51,13 @@
   (map-get? healthcare-providers {provider-id: provider-id})
 )
 
+(define-read-only (get-owner (patient-id (string-utf8 64)))
+  (match (map-get? patient-records {patient-id: patient-id})
+    record (ok (get owner record))
+    ERR_PATIENT_NOT_FOUND
+  )
+)
+
 ;; Public functions
 (define-public (register-patient 
   (patient-id (string-utf8 64)) 
@@ -103,12 +67,15 @@
   (let
     (
       (caller tx-sender)
-      (new-token-id (+ (var-get last-token-id) u1))
+      (initial-access-list (list 
+        caller CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER
+        CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER
+        CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER
+        CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER CONTRACT_OWNER
+      ))
     )
     (asserts! (is-eq caller CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
     (asserts! (is-none (map-get? patient-records {patient-id: patient-id})) ERR_ALREADY_EXISTS)
-    (try! (nft-mint? patient-record patient-id caller))
-    (var-set last-token-id new-token-id)
     (ok (map-set patient-records
       {patient-id: patient-id}
       {
@@ -117,8 +84,9 @@
         date-of-birth: date-of-birth,
         blood-type: blood-type,
         last-updated: block-height,
-        access-list: (list caller),
-        is-active: true
+        access-list: initial-access-list,
+        is-active: true,
+        owner: caller
       }
     ))
   )
@@ -166,12 +134,12 @@
     )
     (asserts! (or (is-eq caller CONTRACT_OWNER) (is-owner caller patient-id)) ERR_NOT_AUTHORIZED)
     (asserts! (is-some (get-healthcare-provider provider)) ERR_INVALID_INPUT)
-    (asserts! (< (len current-access-list) MAX_ACCESS_LIST_SIZE) ERR_LIST_FULL)
+    (asserts! (< (len (filter not-default current-access-list)) MAX_ACCESS_LIST_SIZE) ERR_LIST_FULL)
     (map-set access-requests {patient-id: patient-id, requester: provider} {status: "approved", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT))})
     (ok (map-set patient-records
       {patient-id: patient-id}
       (merge current-record { 
-        access-list: (append current-access-list provider)
+        access-list: (update-access-list current-access-list provider true)
       })
     ))
   )
@@ -188,7 +156,7 @@
     (ok (map-set patient-records
       {patient-id: patient-id}
       (merge current-record { 
-        access-list: (filter remove-principal (get access-list current-record))
+        access-list: (update-access-list (get access-list current-record) provider false)
       })
     ))
   )
@@ -203,6 +171,23 @@
     (ok (map-set healthcare-providers
       {provider-id: caller}
       {name: name, license-number: license-number, is-active: true}
+    ))
+  )
+)
+
+(define-public (transfer-ownership (patient-id (string-utf8 64)) (new-owner principal))
+  (let
+    (
+      (caller tx-sender)
+      (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
+    )
+    (asserts! (is-eq caller (get owner current-record)) ERR_NOT_AUTHORIZED)
+    (ok (map-set patient-records
+      {patient-id: patient-id}
+      (merge current-record { 
+        owner: new-owner,
+        access-list: (update-access-list (get access-list current-record) new-owner true)
+      })
     ))
   )
 )
@@ -222,9 +207,32 @@
 )
 
 (define-private (is-owner (caller principal) (patient-id (string-utf8 64)))
-  (is-eq (some caller) (nft-get-owner? patient-record patient-id))
+  (let
+    (
+      (record (unwrap! (map-get? patient-records {patient-id: patient-id}) false))
+    )
+    (is-eq caller (get owner record))
+  )
 )
 
-(define-private (remove-principal (value principal))
-  (not (is-eq value tx-sender))
+(define-private (not-default (value principal))
+  (not (is-eq value CONTRACT_OWNER))
+)
+
+(define-private (update-access-list (access-list (list 20 principal)) (principal-to-update principal) (add bool))
+  (let
+    (
+      (filtered-list (filter not-default access-list))
+      (new-list (if add
+                    (unwrap! (as-max-len? (append filtered-list principal-to-update) u20) filtered-list)
+                    (filter (lambda (p) (not (is-eq p principal-to-update))) filtered-list)))
+    )
+    (concat new-list (list-repeat CONTRACT_OWNER (- u20 (len new-list))))
+  )
+)
+
+(define-private (list-repeat (value principal) (count uint))
+  (fold (lambda (index result) (unwrap-panic (as-max-len? (append result value) u20)))
+        (list)
+        (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20))
 )
