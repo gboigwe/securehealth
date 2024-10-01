@@ -58,6 +58,26 @@
   )
 )
 
+;; Private functions for input validation
+(define-private (is-valid-patient-id (patient-id (string-utf8 64)))
+  (and (>= (len patient-id) u1) (<= (len patient-id) u64))
+)
+
+(define-private (is-valid-name (name (string-utf8 100)))
+  (and (>= (len name) u1) (<= (len name) u100))
+)
+
+(define-private (is-valid-blood-type (blood-type (string-ascii 3)))
+  (or (is-eq blood-type "A+") (is-eq blood-type "A-")
+      (is-eq blood-type "B+") (is-eq blood-type "B-")
+      (is-eq blood-type "AB+") (is-eq blood-type "AB-")
+      (is-eq blood-type "O+") (is-eq blood-type "O-"))
+)
+
+(define-private (is-valid-license-number (license-number (string-ascii 20)))
+  (and (>= (len license-number) u1) (<= (len license-number) u20))
+)
+
 ;; Public functions
 (define-public (register-patient 
   (patient-id (string-utf8 64)) 
@@ -75,6 +95,10 @@
       ))
     )
     (asserts! (is-eq caller CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+    (asserts! (is-valid-patient-id patient-id) ERR_INVALID_INPUT)
+    (asserts! (is-valid-name name) ERR_INVALID_INPUT)
+    (asserts! (> date-of-birth u0) ERR_INVALID_INPUT)
+    (asserts! (is-valid-blood-type blood-type) ERR_INVALID_INPUT)
     (asserts! (is-none (map-get? patient-records {patient-id: patient-id})) ERR_ALREADY_EXISTS)
     (ok (map-set patient-records
       {patient-id: patient-id}
@@ -100,6 +124,7 @@
       (caller tx-sender)
       (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
     )
+    (asserts! (is-valid-patient-id patient-id) ERR_INVALID_INPUT)
     (asserts! (is-authorized caller patient-id) ERR_NOT_AUTHORIZED)
     (ok (map-set patient-records
       {patient-id: patient-id}
@@ -117,6 +142,7 @@
       (caller tx-sender)
       (current-time block-height)
     )
+    (asserts! (is-valid-patient-id patient-id) ERR_INVALID_INPUT)
     (asserts! (is-some (get-healthcare-provider caller)) ERR_NOT_AUTHORIZED)
     (ok (map-set access-requests
       {patient-id: patient-id, requester: caller}
@@ -132,6 +158,7 @@
       (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
       (current-access-list (get access-list current-record))
     )
+    (asserts! (is-valid-patient-id patient-id) ERR_INVALID_INPUT)
     (asserts! (or (is-eq caller CONTRACT_OWNER) (is-eq caller (get owner current-record))) ERR_NOT_AUTHORIZED)
     (asserts! (is-some (get-healthcare-provider provider)) ERR_INVALID_INPUT)
     (asserts! (< (len (filter not-eq-contract-owner current-access-list)) MAX_ACCESS_LIST_SIZE) ERR_LIST_FULL)
@@ -151,6 +178,7 @@
       (caller tx-sender)
       (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
     )
+    (asserts! (is-valid-patient-id patient-id) ERR_INVALID_INPUT)
     (asserts! (or (is-eq caller CONTRACT_OWNER) (is-eq caller (get owner current-record))) ERR_NOT_AUTHORIZED)
     (map-set access-requests {patient-id: patient-id, requester: provider} {status: "revoked", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT))})
     (ok (map-set patient-records
@@ -168,6 +196,8 @@
       (caller tx-sender)
     )
     (asserts! (is-eq caller CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+    (asserts! (is-valid-name name) ERR_INVALID_INPUT)
+    (asserts! (is-valid-license-number license-number) ERR_INVALID_INPUT)
     (ok (map-set healthcare-providers
       {provider-id: caller}
       {name: name, license-number: license-number, is-active: true}
@@ -181,6 +211,7 @@
       (caller tx-sender)
       (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
     )
+    (asserts! (is-valid-patient-id patient-id) ERR_INVALID_INPUT)
     (asserts! (is-eq caller (get owner current-record)) ERR_NOT_AUTHORIZED)
     (ok (map-set patient-records
       {patient-id: patient-id}
