@@ -234,11 +234,33 @@
 )
 
 (define-private (replace-item (lst (list 20 principal)) (index uint) (new-value principal))
-  (concat
-    (take index lst)
-    (concat
-      (list new-value)
-      (drop (+ index u1) lst)
+  (replace-item-iter lst index new-value u0 (list ))
+)
+
+(define-private (replace-item-iter 
+  (lst (list 20 principal)) 
+  (target-index uint) 
+  (new-value principal)
+  (current-index uint)
+  (result (list 20 principal))
+)
+  (if (>= current-index u20)
+    result
+    (replace-item-iter
+      lst
+      target-index
+      new-value
+      (+ current-index u1)
+      (unwrap-panic (as-max-len? 
+        (append 
+          result 
+          (if (is-eq current-index target-index)
+            new-value
+            (unwrap-panic (element-at lst current-index))
+          )
+        )
+        u20
+      ))
     )
   )
 )
