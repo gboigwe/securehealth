@@ -132,14 +132,14 @@
       (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
       (current-access-list (get access-list current-record))
     )
-    (asserts! (or (is-eq caller CONTRACT_OWNER) (is-owner caller patient-id)) ERR_NOT_AUTHORIZED)
+    (asserts! (or (is-eq caller CONTRACT_OWNER) (is-eq caller (get owner current-record))) ERR_NOT_AUTHORIZED)
     (asserts! (is-some (get-healthcare-provider provider)) ERR_INVALID_INPUT)
     (asserts! (< (len (filter not-eq-contract-owner current-access-list)) MAX_ACCESS_LIST_SIZE) ERR_LIST_FULL)
     (map-set access-requests {patient-id: patient-id, requester: provider} {status: "approved", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT))})
     (ok (map-set patient-records
       {patient-id: patient-id}
       (merge current-record { 
-        access-list: (update-access-list current-access-list provider true)
+        access-list: (modify-access-list current-access-list provider true)
       })
     ))
   )
@@ -151,12 +151,12 @@
       (caller tx-sender)
       (current-record (unwrap! (map-get? patient-records {patient-id: patient-id}) ERR_PATIENT_NOT_FOUND))
     )
-    (asserts! (or (is-eq caller CONTRACT_OWNER) (is-owner caller patient-id)) ERR_NOT_AUTHORIZED)
+    (asserts! (or (is-eq caller CONTRACT_OWNER) (is-eq caller (get owner current-record))) ERR_NOT_AUTHORIZED)
     (map-set access-requests {patient-id: patient-id, requester: provider} {status: "revoked", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT))})
     (ok (map-set patient-records
       {patient-id: patient-id}
       (merge current-record { 
-        access-list: (update-access-list (get access-list current-record) provider false)
+        access-list: (modify-access-list (get access-list current-record) provider false)
       })
     ))
   )
@@ -186,7 +186,7 @@
       {patient-id: patient-id}
       (merge current-record { 
         owner: new-owner,
-        access-list: (update-access-list (get access-list current-record) new-owner true)
+        access-list: (modify-access-list (get access-list current-record) new-owner true)
       })
     ))
   )
@@ -200,18 +200,9 @@
     )
     (or 
       (is-eq caller CONTRACT_OWNER)
-      (is-owner caller patient-id)
+      (is-eq caller (get owner record))
       (is-some (index-of (get access-list record) caller))
     )
-  )
-)
-
-(define-private (is-owner (caller principal) (patient-id (string-utf8 64)))
-  (let
-    (
-      (record (unwrap! (map-get? patient-records {patient-id: patient-id}) false))
-    )
-    (is-eq caller (get owner record))
   )
 )
 
@@ -219,48 +210,39 @@
   (not (is-eq value CONTRACT_OWNER))
 )
 
-(define-private (update-access-list (access-list (list 20 principal)) (principal-to-update principal) (add bool))
+(define-private (modify-access-list (access-list (list 20 principal)) (principal-to-modify principal) (add bool))
   (let
     (
-      (index (if add
-                 (index-of access-list CONTRACT_OWNER)
-                 (index-of access-list principal-to-update)))
+      (new-list (list ))
     )
-    (match index
-      idx (replace-item access-list idx (if add principal-to-update CONTRACT_OWNER))
-      access-list
-    )
+    (get new-list (fold modify-access-list-iter access-list {new-list: new-list, principal-to-modify: principal-to-modify, add: add, added: false}))
   )
 )
 
-(define-private (replace-item (lst (list 20 principal)) (index uint) (new-value principal))
-  (replace-item-iter lst index new-value u0 (list ))
+(define-private (modify-access-list-iter 
+  (current-principal principal) 
+  (state {new-list: (list 20 principal), principal-to-modify: principal, add: bool, added: bool})
 )
-
-(define-private (replace-item-iter 
-  (lst (list 20 principal)) 
-  (target-index uint) 
-  (new-value principal)
-  (current-index uint)
-  (result (list 20 principal))
-)
-  (if (>= current-index u20)
-    result
-    (replace-item-iter
-      lst
-      target-index
-      new-value
-      (+ current-index u1)
-      (unwrap-panic (as-max-len? 
-        (append 
-          result 
-          (if (is-eq current-index target-index)
-            new-value
-            (unwrap-panic (element-at lst current-index))
-          )
+  (let
+    (
+      (new-list (get new-list state))
+      (principal-to-modify (get principal-to-modify state))
+      (add (get add state))
+      (added (get added state))
+      (is-contract-owner (is-eq current-principal CONTRACT_OWNER))
+      (should-add (and add (not added) (is-eq (len new-list) u19)))
+    )
+    (if (< (len new-list) u20)
+      (if (or (and add (is-eq current-principal principal-to-modify))
+              (and (not add) (not (is-eq current-principal principal-to-modify)))
+              (and (not is-contract-owner) (not should-add)))
+        (merge state {new-list: (unwrap-panic (as-max-len? (append new-list current-principal) u20)), added: (or added (is-eq current-principal principal-to-modify))})
+        (if should-add
+          (merge state {new-list: (unwrap-panic (as-max-len? (append new-list principal-to-modify) u20)), added: true})
+          state
         )
-        u20
-      ))
+      )
+      state
     )
   )
 )
