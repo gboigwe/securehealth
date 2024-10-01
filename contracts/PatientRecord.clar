@@ -78,8 +78,6 @@
   (and (>= (len license-number) u1) (<= (len license-number) u20))
 )
 
-
-
 ;; Public functions
 (define-public (register-patient 
   (patient-id (string-utf8 64)) 
