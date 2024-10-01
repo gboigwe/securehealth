@@ -227,12 +227,18 @@
                     (unwrap! (as-max-len? (append filtered-list principal-to-update) u20) filtered-list)
                     (filter (lambda (p) (not (is-eq p principal-to-update))) filtered-list)))
     )
-    (concat new-list (list-repeat CONTRACT_OWNER (- u20 (len new-list))))
+    (fill-default-list new-list)
   )
 )
 
-(define-private (list-repeat (value principal) (count uint))
-  (fold (lambda (index result) (unwrap-panic (as-max-len? (append result value) u20)))
-        (list)
-        (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20))
+(define-private (fill-default-list (lst (list 20 principal)))
+  (let
+    (
+      (current-len (len lst))
+    )
+    (if (< current-len u20)
+      (unwrap-panic (as-max-len? (concat lst (list CONTRACT_OWNER)) u20))
+      lst
+    )
+  )
 )
