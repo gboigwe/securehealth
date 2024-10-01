@@ -134,7 +134,7 @@
     )
     (asserts! (or (is-eq caller CONTRACT_OWNER) (is-owner caller patient-id)) ERR_NOT_AUTHORIZED)
     (asserts! (is-some (get-healthcare-provider provider)) ERR_INVALID_INPUT)
-    (asserts! (< (len (filter not-default current-access-list)) MAX_ACCESS_LIST_SIZE) ERR_LIST_FULL)
+    (asserts! (< (len (filter not-eq-contract-owner current-access-list)) MAX_ACCESS_LIST_SIZE) ERR_LIST_FULL)
     (map-set access-requests {patient-id: patient-id, requester: provider} {status: "approved", requested-at: (get requested-at (unwrap! (get-access-request patient-id provider) ERR_INVALID_INPUT))})
     (ok (map-set patient-records
       {patient-id: patient-id}
@@ -215,30 +215,30 @@
   )
 )
 
-(define-private (not-default (value principal))
+(define-private (not-eq-contract-owner (value principal))
   (not (is-eq value CONTRACT_OWNER))
 )
 
 (define-private (update-access-list (access-list (list 20 principal)) (principal-to-update principal) (add bool))
   (let
     (
-      (filtered-list (filter not-default access-list))
-      (new-list (if add
-                    (unwrap! (as-max-len? (append filtered-list principal-to-update) u20) filtered-list)
-                    (filter (lambda (p) (not (is-eq p principal-to-update))) filtered-list)))
+      (index (if add
+                 (index-of access-list CONTRACT_OWNER)
+                 (index-of access-list principal-to-update)))
     )
-    (fill-default-list new-list)
+    (match index
+      idx (replace-item access-list idx (if add principal-to-update CONTRACT_OWNER))
+      access-list
+    )
   )
 )
 
-(define-private (fill-default-list (lst (list 20 principal)))
-  (let
-    (
-      (current-len (len lst))
-    )
-    (if (< current-len u20)
-      (unwrap-panic (as-max-len? (concat lst (list CONTRACT_OWNER)) u20))
-      lst
+(define-private (replace-item (lst (list 20 principal)) (index uint) (new-value principal))
+  (concat
+    (take index lst)
+    (concat
+      (list new-value)
+      (drop (+ index u1) lst)
     )
   )
 )
