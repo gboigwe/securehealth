@@ -1,7 +1,10 @@
 import { useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { SignedContractCallOptions } from '@stacks/transactions';
+// import { AnchorMode, makeContractCall, broadcastTransaction, SignedContractCallOptions } from '@stacks/transactions';
+// import { stringUtf8CV, stringAsciiCV, uintCV, UIntCV, StringAsciiCV, StringUtf8CV } from '@stacks/transactions';
 import { 
-  callReadOnlyFunction,
+  fetchCallReadOnlyFunction,
   contractPrincipalCV,
   stringAsciiCV,
   stringUtf8CV,
@@ -14,11 +17,12 @@ import {
   TxBroadcastResult,
   cvToValue
 } from '@stacks/transactions';
-import { StacksTestnet } from '@stacks/network';
+import { StacksTestnet, StacksNetwork } from '@stacks/network';
 
 const CONTRACT_ADDRESS = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM';
 const CONTRACT_NAME = 'PatientRecord';
-const network = new StacksTestnet();
+const network: StacksNetwork = new StacksTestnet();
+
 
 export interface PatientRecord {
   patientId: string;
@@ -41,8 +45,8 @@ export function useContract() {
 
   const getPatientRecord = useCallback(async (patientId: string): Promise<PatientRecord> => {
     try {
-      const result = await callReadOnlyFunction({
-        network,
+      const result = await fetchCallReadOnlyFunction({
+
         contractAddress: CONTRACT_ADDRESS,
         contractName: CONTRACT_NAME,
         functionName: 'get-patient-record',
@@ -59,8 +63,8 @@ export function useContract() {
 
   const getAccessRequest = useCallback(async (patientId: string, requester: string): Promise<AccessRequest | null> => {
     try {
-      const result = await callReadOnlyFunction({
-        network,
+      const result = await fetchCallReadOnlyFunction({
+
         contractAddress: CONTRACT_ADDRESS,
         contractName: CONTRACT_NAME,
         functionName: 'get-access-request',
@@ -85,7 +89,7 @@ export function useContract() {
     bloodType: string
   ): Promise<TxBroadcastResult> => {
     try {
-      const txOptions = {
+      const txOptions: SignedContractCallOptions = {
         network,
         anchorMode: AnchorMode.Any,
         contractAddress: CONTRACT_ADDRESS,
@@ -115,7 +119,7 @@ export function useContract() {
     recordHash: string
   ): Promise<TxBroadcastResult> => {
     try {
-      const txOptions = {
+      const txOptions: SignedContractCallOptions = {
         network,
         anchorMode: AnchorMode.Any,
         contractAddress: CONTRACT_ADDRESS,
@@ -140,7 +144,7 @@ export function useContract() {
 
   const requestAccess = useCallback(async (patientId: string): Promise<TxBroadcastResult> => {
     try {
-      const txOptions = {
+      const txOptions: SignedContractCallOptions = {
         network,
         anchorMode: AnchorMode.Any,
         contractAddress: CONTRACT_ADDRESS,
@@ -165,7 +169,7 @@ export function useContract() {
     provider: string
   ): Promise<TxBroadcastResult> => {
     try {
-      const txOptions = {
+      const txOptions: SignedContractCallOptions = {
         network,
         anchorMode: AnchorMode.Any,
         contractAddress: CONTRACT_ADDRESS,
@@ -193,7 +197,7 @@ export function useContract() {
     provider: string
   ): Promise<TxBroadcastResult> => {
     try {
-      const txOptions = {
+      const txOptions: SignedContractCallOptions = {
         network,
         anchorMode: AnchorMode.Any,
         contractAddress: CONTRACT_ADDRESS,
