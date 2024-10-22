@@ -2,9 +2,9 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 // import Layout from './components/layout/Layout';
 import Home from './pages/Home';
-// import Dashboard from './pages/Dashboard';
-// import PatientDashboard from './pages/PatientDashboard';
-// import ProviderDashboard from './pages/ProviderDashboard';
+import Dashboard from './pages/Dashboard';
+import PatientDashboard from './pages/PatientDashboard';
+import ProviderDashboard from './pages/ProviderDashboard';
 // import AuthGuard from './components/auth/AuthGuard';
 
 function App() {
