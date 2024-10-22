@@ -5,7 +5,7 @@ import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import PatientDashboard from './pages/PatientDashboard';
 import ProviderDashboard from './pages/ProviderDashboard';
-// import AuthGuard from './components/auth/AuthGuard';
+import AuthGuard from './components/auth/AuthGuard';
 
 function App() {
   return (
